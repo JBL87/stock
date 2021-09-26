@@ -123,7 +123,7 @@ def update_naver_fs(param='all'):
         df.columns.name = None
 
         # 취합본에 합혀서 저장
-        file = conn_db.get_path('folder_naver_backup')  + "fs_from_naver_원본_취합본.pkl"
+        file = conn_db.get_path('folder_naver_fs_raw')  + "fs_from_naver_원본_취합본.pkl"
         old_df = pd.read_pickle(file)
 
         cols = ['날짜', '재무제표기준', '종목코드', '주기']

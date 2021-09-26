@@ -3,7 +3,7 @@ from glob import glob
 import helper
 import conn_db
 
-folder_naver = conn_db.get_path('folder_naver')
+folder_naver = conn_db.get_path('folder_naver_fs')
 
 # 컬럼 뒤에 추가할 suffix 정의
 expect_suffix = ' (E)' # 전망인 경우 컬럼 뒤에 추가
