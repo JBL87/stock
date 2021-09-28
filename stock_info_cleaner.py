@@ -101,7 +101,7 @@ def classify_co_by_industry():
     '''
     산업별로 기업 분류하기
     '''
-    co_info = conn_db.from_('DB_기업정보', '취합본').drop(columns=cols)
+    co_info = conn_db.from_('DB_기업정보', '취합본')
 
     # 업종별 회사를 산업/업종 master에 업로드. 업종별 광공업지수와 비교분석하기 위함
     df = co_info.groupby(['업종_krx'])['종목명'].apply(', '.join).reset_index()
@@ -138,7 +138,7 @@ def classify_co_by_industry():
     df = df.drop_duplicates().reset_index(drop=True)
     conn_db.to_(df, 'Master_산업,업종','한국표준산업분류별_종목')
 
-# 기업정보 취합본 + 한국표준산업분류별_종목 + 업종별 설명 
+# 기업정보 취합본 + 한국표준산업분류별_종목 + 업종별 설명
 # + 개별테마 + 아이투자_기업정보까지 모두 다 합친 것
 def make_master_co_info():
     # 1.전체 취합본 불러오기
