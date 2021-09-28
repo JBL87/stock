@@ -1,121 +1,14 @@
 import pandas as pd
 import concurrent.futures
+from glob import glob
 from bs4 import BeautifulSoup
 import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import os
+
 import time
 import conn_db
 import helper
 
 user_agent = helper.user_agent
-
-def get_trade_volume_from_krx(from_date, to_date):
-    '''
-    krx에서 종목별 기관,외국인 거래량 가져오기
-    '''
-    print(f'KRX에서 {from_date}~{to_date} 기관과 외국인 거래량 가져오기 시작')
-    folder = r"C:\Users\bong2\Downloads\\"
-    save_folder = r"C:\Users\bong2\OneDrive\DataArchive\DB_주식관련\KRX_80021_기관외국인순매수추이\\"
-    code_list = conn_db.from_("DB_기업정보", 'FS_update_list')[['종목명','종목코드']]
-    #---------------------------------------------------------------------------------
-    def change_dates(from_date, to_date):
-        # 시작날짜
-        xpath = "//*[starts-with(@id,'fromdate')]"
-        driver.find_element_by_xpath(xpath).clear()
-        driver.find_element_by_xpath(xpath).send_keys(from_date)
-        # 종료날짜
-        xpath = "//*[starts-with(@id,'todate')]"
-        driver.find_element_by_xpath(xpath).clear()
-        driver.find_element_by_xpath(xpath).send_keys(to_date)
-    #---------------------------------------------------------------------------------
-    driver = webdriver.Chrome()
-    # 종목별 기관, 외국인 거래량 가져오기
-    codes = code_list['종목코드'].tolist()
-    file_count = len(glob(folder+'*.csv'))
-    driver.get('http://marketdata.krx.co.kr/mdi#document=13020304')
-    for code in codes:
-        from_date = '20190101'
-        to_date = '20191231'
-        change_dates(from_date, to_date)
-        code = 'A'+ code
-        driver.find_element_by_xpath("//*[starts-with(@id,'isu_')]").clear() # 코드명 비우기
-        # 코드 검색
-        driver.find_element_by_xpath("//*[starts-with(@id,'finderbtn')]").click() # 검색 클릭
-        # 검색창 loading확인
-        xpath = '/html/body/div[1]/div[2]/div/div[2]/div/div[1]/div[3]/div/fieldset/form/dl[1]/dd/div[2]/div/div/dl/dd/div/div[1]/div[1]/div[2]/div/div/table/tbody/tr/td[2]/a'
-        WebDriverWait(driver,100).until(EC.element_to_be_clickable((By.XPATH, xpath)))
-
-        # 검색코드 입력
-        xpath = "//*[starts-with(@id,'searchText')]"
-        driver.find_element_by_xpath(xpath).send_keys(code)
-        time.sleep(1)
-
-        # 검색결과 선택
-        xpath = '/html/body/div[1]/div[2]/div/div[2]/div/div[1]/div[3]/div/fieldset/form/dl[1]/dd/div[2]/div/div/dl/dd/div/div[1]/div[1]/div[2]/div/div/table/tbody/tr/td[2]/a'
-        driver.find_element_by_xpath(xpath).click() #
-
-        # 조회버튼 클릭
-        driver.find_element_by_xpath("//*[starts-with(@id,'btnidc')]").click()
-
-
-        # load 확인
-        xpath = '/html/body/div[1]/div[2]/div/div[2]/div/div[1]/div[3]/div/div[1]/div/div[1]/div[1]/div[1]'
-        WebDriverWait(driver,100).until(EC.element_to_be_clickable((By.XPATH, xpath)))
-        time.sleep(1)
-        xpath = '/html/body/div[1]/div[2]/div/div[2]/div/div[1]/div[3]/div/fieldset/form/div/span/button[3]'
-        driver.find_element_by_xpath(xpath).click() # csv 다운로드 클릭
-        # 파일명 변경
-        while len(glob(folder+'*.csv'))==file_count:
-            time.sleep(1)
-        time.sleep(2)
-        if len(glob(folder+'data*.csv'))>0:
-            os.rename(folder+"data.csv", folder+f"{code}_{from_date}_{to_date}.csv")
-        time.sleep(1.5)
-        file_count = len(glob(folder+'*.csv'))
-        #---------------------------------------------------------------------------------------------------
-        from_date = '20200101'
-        to_date = '20200823'
-        change_dates(from_date, to_date)
-        driver.find_element_by_xpath("//*[starts-with(@id,'btnidc')]").click() # 조회버튼 클릭
-        # load 확인
-        xpath = '/html/body/div[1]/div[2]/div/div[2]/div/div[1]/div[3]/div/div[1]/div/div[1]/div[1]/div[1]'
-        WebDriverWait(driver,100).until(EC.element_to_be_clickable((By.XPATH, xpath)))
-        time.sleep(1)
-        xpath = '/html/body/div[1]/div[2]/div/div[2]/div/div[1]/div[3]/div/fieldset/form/div/span/button[3]'
-        driver.find_element_by_xpath(xpath).click() # csv 다운로드 클릭
-        # 파일명 변경
-        while len(glob(folder+'*.csv'))==file_count:
-            time.sleep(1)
-        time.sleep(2)
-        if len(glob(folder+'data*.csv'))>0:
-            os.rename(folder+"data.csv", folder+f"{code}_{from_date}_{to_date}.csv")
-        time.sleep(1.5)
-        file_count = len(glob(folder+'*.csv'))
-        #---------------------------------------------------------------------------------
-    df = pd.DataFrame()
-    for file in glob(folder+'*.csv'):
-        temp = pd.read_csv(file, encoding='utf-8')
-        # 파일명에 있는 코드부분을 컬럼으로 추가
-        temp['종목코드'] = file.split('_')[0].split('\\')[-1][1:]
-        df = df.append(temp)
-    df.rename(columns={'년/월/일':'날짜'}, inplace=True)
-    filt = df['종가'].notna()
-    df = df.filt[filt].copy()
-    df = df.drop_duplicates(subset=['종목코드','날짜']).reset_index(drop=True)
-    df = helper.remove_str_from_colname(df,'(주)')
-    cols = ['종가', '대비','거래량',
-            '기관_매수량', '기관_매도량', '기관_순매수',
-            '외국인_매수량', '외국인_매도량','외국인_순매수']
-    for col in cols:
-        df[col] = df[col].str.replace(',','')
-        df[col] = df[col].astype(float)
-    # 저장하고 다운로드 폴더에 있는 모든 파일 삭제
-    df.to_pickle(save_folder+'기관+외국인거래실적.pkl')
-    helper.del_all_files_in_download()
 
 # 코스피, 코스닥 지수 업데이트
 def update_market_index():
@@ -132,7 +25,8 @@ def update_market_index():
     print('코스피, 코스닥 지수 업데이트 완료')
 
 # PER/PBR/배당수익률_하루치
-def get_per_pbr_div_yld_from_krx(update_date):
+@helper.timer
+def _get_per_pbr_div_yld_from_krx(update_date):
     '''
     yyyy-mm-dd 형식으로 날짜 입력
     [12021] PER/PBR/배당수익률(개별종목)
@@ -176,13 +70,13 @@ def update_per_pbr_div_from_krx():
     new_dates.sort(reverse=True)
     folder = conn_db.get_path('perpbr배당수익률_raw')
 
-    if len(new_dates)>0: 
+    if len(new_dates)>0:
         for update_date in new_dates:
             try:
-                df = get_per_pbr_div_yld_from_krx(update_date)
+                df = _get_per_pbr_div_yld_from_krx(update_date)
             except:
                 time.sleep(2)
-                df = get_per_pbr_div_yld_from_krx(update_date)
+                df = _get_per_pbr_div_yld_from_krx(update_date)
             df.to_pickle(folder+f'{update_date}'+'_PERPBR배당수익률.pkl')
             time.sleep(5)
 
@@ -201,7 +95,7 @@ def update_per_pbr_div_from_krx():
         print('업데이트 내역 없음')
 
 # 시가총액, 주가, 거래량 하루치
-def get_market_cap(update_date):
+def _get_market_cap(update_date):
     url = 'http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
     header_info = {'User-Agent': user_agent}
     params = {'bld': 'dbms/MDC/STAT/standard/MDCSTAT01501',
@@ -261,10 +155,10 @@ def update_market_cap():
         folder = conn_db.get_path('시가총액_raw')
         for update_date in new_dates:
             try:
-                df = get_market_cap(update_date)
+                df = _get_market_cap(update_date)
             except:
                 time.sleep(2)
-                df = get_market_cap(update_date)
+                df = _get_market_cap(update_date)
             df.to_pickle(folder+f'{update_date}'+'_시가총액.pkl')
             time.sleep(5)
 
@@ -275,7 +169,7 @@ def update_market_cap():
         df = helper.make_keycode(df) # KEY 컬럼 추가
 
         # 전체취합본 불러와서 추가한 다음에 저장
-        old_df = pd.read_pickle(path)
+        old_df = conn_db.import_('시가총액_전체취합본')
         cols = ['KEY', 'DATE']
         helper.add_df(df, old_df, check_cols=cols)
         df.to_pickle(conn_db.get_path('시가총액_전체취합본')+'.pkl')
@@ -324,7 +218,8 @@ def update_market_cap():
     # df.rename(columns=names, inplace=True)
     #################################################
 
-def get_market_index_type(update_date, index_type):
+# 업종별 지수
+def _get_market_index_type(update_date, index_type):
     url = 'http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
     header_info = {'User-Agent': user_agent}
     params = {'bld': 'dbms/MDC/STAT/standard/MDCSTAT00101',
@@ -355,14 +250,14 @@ def get_market_index_type(update_date, index_type):
 
     cols = list(col_names.values())
     return df[cols]
-def get_market_index_types(update_date):
+def _get_market_index_types(update_date):
     index_types = {'01': 'KRX',
                    '02': 'KOSPI',
                    '03': 'KOSDAQ',
                    '04': '테마'}
     df = pd.DataFrame()
     for index_type in index_types.keys():
-        temp = get_market_index_type(update_date, index_type)
+        temp = _get_market_index_type(update_date, index_type)
         temp['계열구분'] = index_types[index_type]
         df = df.append(temp, ignore_index=True)
 
@@ -371,26 +266,24 @@ def get_market_index_types(update_date):
     df['날짜'] = str(update_date)
     df['날짜'] = pd.to_datetime(df['날짜'])
     cols = ['날짜', '계열구분'] + cols
-
     # 저장
     return df[cols]
-
-def update_market_index():
+def update_industry_index():
     new_dates = conn_db.from_('코스피_코스닥지수', '최근날짜')[['Date']]
     new_dates = new_dates['Date'].str.replace('-', '').tolist()
     path = conn_db.get_path('업종별지수')
 
     for new_date in new_dates:
-        df = get_market_index_types(new_date)
+        df = _get_market_index_types(new_date)
         df.to_pickle(path + f'업종별지수_{new_date}.pkl')
         time.sleep(5)
 
     df = pd.concat([pd.read_pickle(file)
                    for file in glob(path+'*.pkl')], ignore_index=True)
     df.to_pickle(conn_db.get_path('업종별지수_취합본')+'.pkl')
-    print('업종별 지수 업데이트 완료')
 
-def get_market_index_type_per(update_date, index_type):
+# 업종별 지수 PER, PBR
+def _get_market_index_type_per(update_date, index_type):
     url = 'http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
     header_info = {'User-Agent': user_agent}
     params = {'bld': 'dbms/MDC/STAT/standard/MDCSTAT00701',
@@ -416,14 +309,14 @@ def get_market_index_type_per(update_date, index_type):
 
     cols = list(col_names.values())
     return df[cols]
-def get_market_index_types_per(update_date):
+def _get_market_index_types_per(update_date):
     index_types = {'01': 'KRX',
                    '02': 'KOSPI',
                    '03': 'KOSDAQ',
                    '04': '테마'}
     df = pd.DataFrame()
     for index_type in index_types.keys():
-        temp = get_market_index_type(update_date, index_type)
+        temp = _get_market_index_type(update_date, index_type)
         temp['계열구분'] = index_types[index_type]
         df = df.append(temp, ignore_index=True)
 
@@ -434,20 +327,15 @@ def get_market_index_types_per(update_date):
 
     # 저장
     return df[cols]
-
-def update_market_index_per():
+def update_industry_index_per():
     new_dates = conn_db.from_('코스피_코스닥지수', '최근날짜')[['Date']]
     new_dates = new_dates['Date'].str.replace('-', '').tolist()
     path = conn_db.get_path('업종별지수_PERPBR배당수익률')
 
     for new_date in new_dates:
-        df = get_market_index_types_per(new_date)
+        df = _get_market_index_types_per(new_date)
         df.to_pickle(path + f'업종별지수_PERPBR배당수익률{new_date}.pkl')
         time.sleep(5)
-
-    df = pd.concat([pd.read_pickle(file)
-                   for file in glob(path+'*.pkl')], ignore_index=True)
+    
+    df = helper.concat_pickle(path)
     df.to_pickle(conn_db.get_path('업종별지수_PERPBR배당수익률_취합본')+'.pkl')
-    print('업종별 지수 PER,PBR,배당수익률 업데이트 완료')
-
-
