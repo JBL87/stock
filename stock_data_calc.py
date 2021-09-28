@@ -19,8 +19,10 @@ df_index = conn_db.import_('PER_PBR_배당수익률_전체취합본')
 
 # 주가, 거래량, 거래대금, 시가총액 데이터 불러와서 전처리
 df_cap = conn_db.import_('시가총액_전체취합본')
+
 row_filter = df_cap['DATE'] >= '2019-01-01'
-col_filter = ['DATE', 'KEY', 'close', '거래량', '거래대금', '시가총액']
+col_filter = ['DATE', 'KEY', 'close',
+              '거래량', '거래대금', '시가총액']
 df_cap = df_cap.loc[row_filter, col_filter].reset_index(drop=True)
 df_cap['시총대비 거래대금'] = df_cap['거래대금']/df_cap['시가총액']
 
@@ -36,7 +38,7 @@ def _make_dummy_df(days):
                       last_n_days_df['날짜'].astype(str).tolist())
     return df
 # 종목별 일별 상승률 계산
-def calc_daily_change(code, colname, days):
+def _calc_daily_change(code, colname, days):
     '''
     종목별 일별 상승률 계산
     '''
@@ -58,7 +60,7 @@ def calc_daily_change(code, colname, days):
     except:
         print(f'{code} 에서 오류')
 # 종목별 일별 누적상승률 계산
-def calc_cum_change(code, colname):
+def _calc_cum_change(code, colname):
     '''
     종목별 일별 누적상승률 계산
     '''
@@ -81,7 +83,7 @@ def calc_cum_change(code, colname):
     else:
         pass
 # N days 동안의 주가, 거래량, 거래대금, 시가총액 테이블 구하기
-def get_series_df(colname, days):
+def _get_series_df(colname, days):
     '''
     N days 동안의 주가, 거래량, 거래대금, 시가총액 테이블 구하기
     '''
@@ -111,7 +113,9 @@ def get_series_df(colname, days):
                         index='KEY').reset_index()
     df.columns.name = None
     return df
+
 # 최근 일별 추이
+@helper.timer
 def daily_values(days):
     '''
     최근 일별 추이
@@ -126,12 +130,11 @@ def daily_values(days):
     cols = _make_dummy_df(days).columns.tolist()
 
     for colname in upload_dict.keys():
-        # df = _make_dummy_df(days)
-        # df = df.append(get_series_df(colname, days), ignore_index=True)
-        df = get_series_df(colname, days)[cols]
+        df = _get_series_df(colname, days)[cols]
         conn_db.to_(df, 'data_from_krx', upload_dict[colname])
-        print(f'{colname} 최근 {days}일 테이블 완료')
+
 # 최근 일별 상승률
+@helper.timer
 def daily_change(days):
     '''
     최근 일별 상승률
@@ -142,10 +145,11 @@ def daily_change(days):
     # loop 돌고나서 유효한 컬름으로 대체하기 위해서 미리 cols 생성
     cols = _make_dummy_df(days).columns.tolist()
     for colname in upload_dict.keys():
-        df = pd.concat([calc_daily_change(code, colname, days) for code in codes], ignore_index=True)
+        df = pd.concat([_calc_daily_change(code, colname, days) for code in codes], ignore_index=True)
         conn_db.to_(df[cols], 'data_from_krx', upload_dict[colname])
-        print(f'{colname} 최근 {days}일 상승률 테이블 완료')
+
 # 종목별 일별 누적상승률
+@helper.timer
 def cum_change(days):
     '''
     누적상승률
@@ -157,10 +161,11 @@ def cum_change(days):
     upload_dict = {'주가':'주가_누적증감',
                     '시가총액':'시총_누적증감'}
     for colname in upload_dict.keys():
-        df = pd.concat([calc_cum_change(code, colname) for code in valid_codes], ignore_index=True)
+        df = pd.concat([_calc_cum_change(code, colname) for code in valid_codes], ignore_index=True)
         conn_db.to_(df, 'data_from_krx', upload_dict[colname])
-        print(f'{colname} 최근 누적증감률 테이블 완료')
+
 # 코스피 일별 상승률
+@helper.timer
 def kospi_daily_chg(days):
     cols = ['날짜', '코스피']
     df = kospi_df[cols].tail(days+1)
@@ -169,8 +174,10 @@ def kospi_daily_chg(days):
     cols = ['날짜', '코스피 증감']
     df = df[cols].tail(days).reset_index(drop=True)
     conn_db.to_(df, '코스피_코스닥지수', 'kospi_전일비')
+
 # 일별 시장대비 상승률
-def chg_over_market(kospi_days):
+@helper.timer
+def chg_over_market():
     # 코스피 전일비 불러오기
     df_kospi = conn_db.from_('코스피_코스닥지수', 'kospi_전일비')
     df_kospi['코스피 증감'] = df_kospi['코스피 증감'].astype(float)
@@ -191,8 +198,9 @@ def chg_over_market(kospi_days):
     df = df.pivot_table(index='KEY', columns='날짜', values='시장대비').reset_index()
     df.columns.name = None
     conn_db.to_(df, 'data_from_krx', '시장대비수익률_일별')
-    print('시장대비 일별 수익률 계산 완료')
+
 # 코스피 일별 누적상승률
+@helper.timer
 def calc_kospi_cum_change(days):
     '''
     코스피 일별 누적상승률 계산
@@ -205,7 +213,9 @@ def calc_kospi_cum_change(days):
     df = df.tail(days).sort_values(by='날짜', ascending=False)
     df.reset_index(drop=True, inplace=True)
     conn_db.to_(df, '코스피_코스닥지수', '코스피증감')
+
 # 종목별 시장대비 누적상승률
+@helper.timer
 def cum_chg_over_market():
     kospi_df = conn_db.from_('코스피_코스닥지수', '코스피증감').head(1)
     stock_df = conn_db.from_('data_from_krx', '시총_누적증감')
@@ -239,7 +249,9 @@ def cum_chg_over_market():
     cols = ['KEY'] + date_cum_cols
     df = df[cols]
     conn_db.to_(df, 'data_from_krx', '시장대비수익률_누적')
+
 # PER_PBR_배당수익률 table 만들기
+@helper.timer
 def make_code_index_daily_df(days):
     '''
     PER_PBR_배당수익률 table 만들기
@@ -250,9 +262,11 @@ def make_code_index_daily_df(days):
 
     for col in ['EPS','PER','PBR','BPS','DPS','배당수익률']:
         df_index[col].fillna(0, inplace=True)
-        df = get_series_df(col,days)[cols]
+        df = _get_series_df(col,days)[cols]
         conn_db.to_(df, 'data_from_krx', col)
+
 # 가장 최근날짜의 지표 모은 df 만들기
+@helper.timer
 def make_last_date_indexes():
     '''
     가장 최근날짜의 지표 모은 df 만들기
@@ -285,7 +299,9 @@ def make_last_date_indexes():
             'DPS',
             '배당수익률']
     conn_db.to_(df[cols], 'data_from_krx', '전체취합본')
-# 시가총액+PER+PBR
+
+# 시가총액+PER+PBR 데이터셋 만들어놓기
+@helper.timer
 def union_stock_dataset():
     df_cap = conn_db.import_('시가총액_전체취합본')
     date_filt = df_cap['DATE'] >= '2019-01-01'
@@ -301,3 +317,17 @@ def union_stock_dataset():
             'EPS', 'PER', 'BPS', 'PBR', 'DPS', '배당수익률']
     df = df_cap.merge(df_index, on=['KEY', '날짜'], how='left')[cols]
     conn_db.export_(df, '취합본_시가총액_PER')
+
+# 전체 계산 실행
+def calc_stock_market_data():
+    days = 30
+    daily_values(days)              # 최근 일별 추이
+    daily_change(days)              # 최근 일별 상승률
+    cum_change(days)                # 종목별 일별 누적상승률
+    kospi_daily_chg(days)           # 코스피 일별 상승률
+    chg_over_market()               # 일별 시장대비 상승률
+    calc_kospi_cum_change(days)     # 코스피 일별 누적상승률
+    cum_chg_over_market()           # 종목별 시장대비 누적상승률
+    make_code_index_daily_df(days)  # PER_PBR_배당수익률 table 만들기
+    make_last_date_indexes()        # 가장 최근날짜의 지표 모은 df 만들기
+    union_stock_dataset()           # 시가총액+PER+PBR 데이터셋 만들어놓기
