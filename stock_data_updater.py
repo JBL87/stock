@@ -7,7 +7,7 @@ import requests
 import time
 import conn_db
 import helper
-
+import FinanceDataReader as fdr
 user_agent = helper.user_agent
 
 # 코스피, 코스닥 지수 업데이트
@@ -15,17 +15,13 @@ def update_market_index():
     '''
     코스피, 코스닥 지수 업데이트
     '''
-    import FinanceDataReader as fdr
-
     mkt = {'ks11':'import_kospi_all',
-            'kq11':'import_kosdaq_all'}
+           'kq11':'import_kosdaq_all'}
     for x in mkt.keys():
         df = fdr.DataReader(x, start= '19800101').reset_index()
         conn_db.to_(df, '코스피_코스닥지수', mkt[x])
-    print('코스피, 코스닥 지수 업데이트 완료')
 
 # PER/PBR/배당수익률_하루치
-@helper.timer
 def _get_per_pbr_div_yld_from_krx(update_date):
     '''
     yyyy-mm-dd 형식으로 날짜 입력
@@ -81,15 +77,14 @@ def update_per_pbr_div_from_krx():
             time.sleep(5)
 
         # 새로 받은 파일 취합
-        files = glob(folder+'*.pkl')
-        df = pd.concat([pd.read_pickle(file) for file in files], ignore_index=True)
-        df = df.drop_duplicates().reset_index(drop=True)
+        df = helper.concat_pickle(folder)
         df = helper.make_keycode(df) # KEY 컬럼 추가
 
         # 전체취합본 불러와서 추가한 다음에 저장
         old_df = conn_db.import_('PER_PBR_배당수익률_전체취합본')
         cols = ['KEY', '날짜']
         df = helper.add_df(df, old_df, check_cols=cols)
+        df.sort_values(by=cols, inplace=True)
         df.to_pickle(conn_db.get_path('PER_PBR_배당수익률_전체취합본')+'.pkl')
     else:
         print('업데이트 내역 없음')
@@ -163,15 +158,14 @@ def update_market_cap():
             time.sleep(5)
 
         # 새로 받은 파일 취합
-        files = glob(folder+'*.pkl')
-        df = pd.concat([pd.read_pickle(file) for file in files], ignore_index=True)
-        df = df.drop_duplicates().reset_index(drop=True)
+        df = helper.concat_pickle(folder)
         df = helper.make_keycode(df) # KEY 컬럼 추가
 
         # 전체취합본 불러와서 추가한 다음에 저장
         old_df = conn_db.import_('시가총액_전체취합본')
         cols = ['KEY', 'DATE']
-        helper.add_df(df, old_df, check_cols=cols)
+        df = helper.add_df(df, old_df, check_cols=cols)
+        df.sort_values(by=cols, inplace=True)
         df.to_pickle(conn_db.get_path('시가총액_전체취합본')+'.pkl')
     else:
         print('업데이트 내역 없음')
@@ -266,7 +260,6 @@ def _get_market_index_types(update_date):
     df['날짜'] = str(update_date)
     df['날짜'] = pd.to_datetime(df['날짜'])
     cols = ['날짜', '계열구분'] + cols
-    # 저장
     return df[cols]
 def update_industry_index():
     new_dates = conn_db.from_('코스피_코스닥지수', '최근날짜')[['Date']]
@@ -324,6 +317,7 @@ def _get_market_index_types_per(update_date):
     df['날짜'] = str(update_date)
     df['날짜'] = pd.to_datetime(df['날짜'])
     cols = ['날짜', '계열구분'] + cols
+    return df[cols]
 
     # 저장
     return df[cols]
@@ -336,6 +330,6 @@ def update_industry_index_per():
         df = _get_market_index_types_per(new_date)
         df.to_pickle(path + f'업종별지수_PERPBR배당수익률{new_date}.pkl')
         time.sleep(5)
-    
+
     df = helper.concat_pickle(path)
     df.to_pickle(conn_db.get_path('업종별지수_PERPBR배당수익률_취합본')+'.pkl')
