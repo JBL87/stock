@@ -62,7 +62,8 @@ def update_co_by_theme_from_naver():
     co_by_theme = co_by_theme.drop(columns=[0]).reset_index(drop=True)
 
     # KRX df 불러와서 KEY 컬럼 만들기
-    df_map_code = conn_db.from_('DB_기업정보', 'from_krx')[['종목코드', 'KEY','종목명']]
+    cols = ['종목코드', 'KEY', '종목명']
+    df_map_code = conn_db.from_('DB_기업정보', 'from_krx')[cols]
     co_by_theme = co_by_theme.merge(df_map_code, on='종목코드')
 
 
@@ -182,7 +183,8 @@ def update_company_explain_from_naver(param='all'):
     conn_db.to_(df, 'DB_기업정보', '기업설명_naver')
 
 # Dart에 있는 기업정보 업데이트
-def update_co_from_dart(param='all'):
+@helper.timer
+def update_co_from_dart(param='new'):
     '''
     Dart에 있는 기업정보 업데이트
     '''
@@ -193,7 +195,7 @@ def update_co_from_dart(param='all'):
     raw_corp_code_list = pd.DataFrame(dart.api.filings.get_corp_code())
 
     #stock_code가 null인것 제거(비상장사 제외하기)
-    if param != 'all':
+    if param == 'all':
         # 업데이트 필요한 종목코드만 불러와서 종목코드별 회사코드 얻기
         all_codes = conn_db.from_('DB_기업정보', 'dart_update_codes')
         filt = all_codes['update_codes'].apply(len)>1
@@ -256,8 +258,7 @@ def update_co_from_dart(param='all'):
 
         # 취합후 업로드
         old = conn_db.from_('DB_기업정보', 'from_dart')
-        corp_info = corp_info.append(old, ignore_index=True)
-        corp_info = corp_info.drop_duplicates().reset_index(drop=True)
+        corp_info = helper.add_df(corp_info, old, ['KEY'])
         conn_db.to_(corp_info, 'DB_기업정보', 'from_dart')
     else:
         print('DART 기업정보 업데이할 내역 없음')
@@ -297,6 +298,7 @@ def get_all_code_info_from_krx():
               'csvxls_isNo': 'false'}
     r = requests.post(url, data=params, headers=header_info)
     df = pd.DataFrame(r.json()['OutBlock_1'])
+    
     names = {'ISU_SRT_CD': '종목코드',
              'ISU_NM': '종목명(전체)',
              'ISU_ENG_NM': '영문',
@@ -322,6 +324,7 @@ def get_all_code_info_from_krx():
               'mktcap': 'ALL', }
     r = requests.post(url, data=params, headers=header_info, timeout=5)
     df = pd.DataFrame(r.json()['block1'])
+
     names = {'REP_ISU_SRT_CD': '종목코드',
              'COM_ABBRV': '종목명',
              'MKT_NM': '시장',
