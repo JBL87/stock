@@ -86,6 +86,7 @@ def update_per_pbr_div_from_krx():
         df = helper.add_df(df, old_df, check_cols=cols)
         df.sort_values(by=cols, inplace=True)
         df.to_pickle(conn_db.get_path('PER_PBR_배당수익률_전체취합본')+'.pkl')
+        helper.remove_files(folder)
     else:
         print('업데이트 내역 없음')
 
@@ -155,6 +156,7 @@ def update_market_cap():
                 time.sleep(2)
                 df = _get_market_cap(update_date)
             df.to_pickle(folder+f'{update_date}'+'_시가총액.pkl')
+            print(f'{update_date} 다운로드 완료')
             time.sleep(5)
 
         # 새로 받은 파일 취합
@@ -167,6 +169,7 @@ def update_market_cap():
         df = helper.add_df(df, old_df, check_cols=cols)
         df.sort_values(by=cols, inplace=True)
         df.to_pickle(conn_db.get_path('시가총액_전체취합본')+'.pkl')
+        helper.remove_files(folder)
     else:
         print('업데이트 내역 없음')
 
@@ -212,7 +215,7 @@ def update_market_cap():
     # df.rename(columns=names, inplace=True)
     #################################################
 
-# 업종별 지수
+# KRX/KOSPI/KOSDAQ/테마 업종별 지수 개별 업데이트
 def _get_market_index_type(update_date, index_type):
     url = 'http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd'
     header_info = {'User-Agent': user_agent}
@@ -244,6 +247,7 @@ def _get_market_index_type(update_date, index_type):
 
     cols = list(col_names.values())
     return df[cols]
+# KRX/KOSPI/KOSDAQ/테마 업종별 지수 전체 업데이트
 def _get_market_index_types(update_date):
     index_types = {'01': 'KRX',
                    '02': 'KOSPI',
@@ -262,18 +266,29 @@ def _get_market_index_types(update_date):
     cols = ['날짜', '계열구분'] + cols
     return df[cols]
 def update_industry_index():
+    path = conn_db.get_path('업종별지수_raw')
+    file = conn_db.get_path('업종별지수_취합본')+'.pkl'
+    old_df = pd.read_pickle(file)
+
     new_dates = conn_db.from_('코스피_코스닥지수', '최근날짜')[['Date']]
     new_dates = new_dates['Date'].str.replace('-', '').tolist()
-    path = conn_db.get_path('업종별지수')
+    
+    old_dates = old_df['날짜'].astype(str).str.replace('-','')
+    new_dates = list(set(new_dates)-set(old_dates))
 
     for new_date in new_dates:
         df = _get_market_index_types(new_date)
         df.to_pickle(path + f'업종별지수_{new_date}.pkl')
         time.sleep(5)
 
-    df = pd.concat([pd.read_pickle(file)
-                   for file in glob(path+'*.pkl')], ignore_index=True)
-    df.to_pickle(conn_db.get_path('업종별지수_취합본')+'.pkl')
+    df = helper.concat_pickle(path)
+    
+    cols = ['지수명', '날짜', '계열구분']
+    df = helper.add_df(df, old_df, cols).sort_values(by=cols)
+
+    conn_db.to_(df, 'DB_업종별지수', '업종별지수')
+    df.to_pickle(file)
+    helper.remove_files(path)
 
 # 업종별 지수 PER, PBR
 def _get_market_index_type_per(update_date, index_type):
@@ -309,7 +324,7 @@ def _get_market_index_types_per(update_date):
                    '04': '테마'}
     df = pd.DataFrame()
     for index_type in index_types.keys():
-        temp = _get_market_index_type(update_date, index_type)
+        temp = _get_market_index_type_per(update_date, index_type)
         temp['계열구분'] = index_types[index_type]
         df = df.append(temp, ignore_index=True)
 
@@ -317,19 +332,28 @@ def _get_market_index_types_per(update_date):
     df['날짜'] = str(update_date)
     df['날짜'] = pd.to_datetime(df['날짜'])
     cols = ['날짜', '계열구분'] + cols
-    return df[cols]
-
-    # 저장
-    return df[cols]
+    return df[cols] 
 def update_industry_index_per():
+    path = conn_db.get_path('업종별지수_PERPBR배당수익률_raw')
+    file = conn_db.get_path('업종별지수_PERPBR배당수익률_취합본')+'.pkl'
+    old_df = pd.read_pickle(file)
+
     new_dates = conn_db.from_('코스피_코스닥지수', '최근날짜')[['Date']]
     new_dates = new_dates['Date'].str.replace('-', '').tolist()
-    path = conn_db.get_path('업종별지수_PERPBR배당수익률')
+    
+    old_dates = old_df['날짜'].astype(str).str.replace('-', '')
+    new_dates = list(set(new_dates)-set(old_dates))
 
     for new_date in new_dates:
         df = _get_market_index_types_per(new_date)
-        df.to_pickle(path + f'업종별지수_PERPBR배당수익률{new_date}.pkl')
+        df.to_pickle(path + f'업종별지수_PERPBR배당수익률_{new_date}.pkl')
         time.sleep(5)
 
     df = helper.concat_pickle(path)
-    df.to_pickle(conn_db.get_path('업종별지수_PERPBR배당수익률_취합본')+'.pkl')
+    
+    cols = ['지수명', '날짜', '계열구분']
+    df = helper.add_df(df, old_df, cols).sort_values(by=cols)
+
+    conn_db.to_(df, 'DB_업종별지수', '업종별지수_per')
+    df.to_pickle(file)
+    helper.remove_files(path)
