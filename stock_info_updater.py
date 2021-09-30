@@ -195,13 +195,12 @@ def update_co_from_dart(param='new'):
     raw_corp_code_list = pd.DataFrame(dart.api.filings.get_corp_code())
 
     #stock_code가 null인것 제거(비상장사 제외하기)
-    if param == 'all':
+    if param != 'all':
         # 업데이트 필요한 종목코드만 불러와서 종목코드별 회사코드 얻기
         all_codes = conn_db.from_('DB_기업정보', 'dart_update_codes')
         filt = all_codes['update_codes'].apply(len)>1
         valid_codes = all_codes[filt]['update_codes'].tolist()
-        filt = raw_corp_code_list['stock_code'].isin(valid_codes)
-        del all_codes
+        filt = raw_corp_code_list['stock_code'].isin(valid_codes) 
     else:
         filt = raw_corp_code_list.stock_code.notnull()
 
