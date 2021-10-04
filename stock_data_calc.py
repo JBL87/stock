@@ -1,6 +1,5 @@
 import pandas as pd
 from glob import glob
-import dart_fss as dart
 import conn_db, helper
 
 import warnings
@@ -38,50 +37,52 @@ def _make_dummy_df(days):
                       last_n_days_df['날짜'].astype(str).tolist())
     return df
 # 종목별 일별 상승률 계산
-def _calc_daily_change(code, colname, days):
-    '''
-    종목별 일별 상승률 계산
-    '''
-    filt_date = df_cap['날짜'].isin(df_cap['날짜'].unique()[-(days+1):])
-    filt_key = df_cap['KEY'] == code
-    filt = filt_date & filt_key
-    df = df_cap.loc[filt].reset_index(drop=True)
-    try:
-        if len(df) > 0:
-            df[f'{colname} 전일비'] = df[colname].pct_change(periods=1)
-            df['날짜'] = df['날짜'].astype(str)
-            df = df.tail(days).pivot_table(
-                index='KEY', columns='날짜', values=f'{colname} 전일비')
-            df.reset_index(inplace=True)
-            df.columns.name = None
-            return df
-        else:
-            pass
-    except:
-        print(f'{code} 에서 오류')
+def _calc_daily_change(colname, days):
+    # pivot
+    df = df_cap[['날짜','KEY', colname]]
+    df = df.pivot_table(index='날짜', columns='KEY', values=colname)
+    df.columns.name=None
+
+    # 마지막 31행 선택
+    df = df.tail(days+1).reset_index()
+    # 전일대비 증감률 계산
+    for stock in df.columns.tolist()[1:]:
+        df[stock] = df[stock].pct_change(periods=1)
+    # 마지막 30행 선택
+    df =  df.tail(days).reset_index(drop=True)
+    # unpivot
+    df = df.melt(id_vars='날짜',var_name='KEY').dropna().reset_index(drop=True)
+    df['날짜']= df['날짜'].astype(str)
+    
+    # 날짜를 컴럼으로
+    cols = ['KEY'] + df['날짜'].unique().tolist()
+    df = df.pivot_table(index='KEY', columns='날짜').reset_index()
+    df.columns = cols
+    return df
+
 # 종목별 일별 누적상승률 계산
-def _calc_cum_change(code, colname):
+def _calc_cum_change(colname, days):
     '''
     종목별 일별 누적상승률 계산
     '''
-    cols = ['KEY','날짜',colname]
-    df = df_cap.loc[df_cap['KEY'] == code, cols].iloc[-201:]
+    # KEY, 날짜,colname만 있는 df
+    cols = ['KEY', '날짜', colname]
+    df = df_cap.loc[:, cols]
 
-    if colname == '시가총액':
-        df[colname] = df[colname]/1000000000000
-    elif colname == '거래대금':
-        df[colname] = df[colname]/100000000
-    elif colname == '거래량':
-        df[colname] = df[colname]/10000
-    else:
-        pass
+    # pivot
+    df = df.pivot_table(index='날짜', columns='KEY', values=colname)
+    df.columns.name = None
+    df.reset_index(inplace=True)
+    # 전체 값이 있는 경우만 선택
+    df = df.iloc[-(days+1):].dropna(axis=1, how='any')
+    df.reset_index(drop=True, inplace=True)
 
-    if len(df) > 0:
-        for x in [1, 2, 3, 5, 10, 20, 45, 60, 120, 200]:
-            df.loc[:, f'D-{x}'] = df[colname].pct_change(periods=x)
-        return df.tail(1).reset_index(drop=True)
-    else:
-        pass
+    # df.columns.tolist()[1:] = 'KEY' 만 선택해서 누적상승률 계산
+    for stock in df.columns.tolist()[1:]:
+        df[stock] = df[stock].pct_change(periods=days)
+    df = df.tail(1).melt(id_vars='날짜', var_name='KEY', value_name=f'D-{days}')
+    df = df.dropna().reset_index(drop=True)
+    return df
 # N days 동안의 주가, 거래량, 거래대금, 시가총액 테이블 구하기
 def _get_series_df(colname, days):
     '''
@@ -140,28 +141,39 @@ def daily_change(days):
     최근 일별 상승률
     '''
     upload_dict = {'주가':'주가_전일비',
-                    '시가총액':'시가총액_전일비'}
-    # 신규상장인 경우 값 계산을 안해서 nan이 생겨서
-    # loop 돌고나서 유효한 컬름으로 대체하기 위해서 미리 cols 생성
-    cols = _make_dummy_df(days).columns.tolist()
+                   '시가총액':'시가총액_전일비'}
     for colname in upload_dict.keys():
-        df = pd.concat([_calc_daily_change(code, colname, days) for code in codes], ignore_index=True)
-        conn_db.to_(df[cols], 'data_from_krx', upload_dict[colname])
+        df = _calc_daily_change(colname, days)
+        conn_db.to_(df, 'data_from_krx', upload_dict[colname])
 
 # 종목별 일별 누적상승률
 @helper.timer
-def cum_change(days):
+def cum_change():
     '''
-    누적상승률
+    누적상승률 계산
     '''
     last_date = df_cap['날짜'].max()  # 가장 최근 날짜 필터링
-    filt = df_cap['날짜']==last_date
-    valid_codes = df_cap.loc[filt]['KEY'].tolist() # 가장 최근 날짜에 값이 있는 KEY
+    filt = df_cap['날짜'] == last_date
 
     upload_dict = {'주가':'주가_누적증감',
-                    '시가총액':'시총_누적증감'}
+                   '시가총액':'시총_누적증감'}
     for colname in upload_dict.keys():
-        df = pd.concat([_calc_cum_change(code, colname) for code in valid_codes], ignore_index=True)
+        # 가장 최근 날짜 필터링 + join을 위한 df 만들기
+        cols = ['KEY','날짜',f'{colname}']
+        df = df_cap.loc[filt, cols].reset_index(drop=True)
+
+        if colname == '시가총액':
+            df[colname] = df[colname]/1000000000000
+        elif colname == '거래대금':
+            df[colname] = df[colname]/100000000
+        elif colname == '거래량':
+            df[colname] = df[colname]/10000
+        elif colname == '배당수익률':
+            df[colname] = df[colname]/100
+
+        calc_days = [1, 2, 3, 5, 10, 20, 45, 60, 120, 200]
+        for calc_day in calc_days:
+            df = df.merge(_calc_cum_change('주가',calc_day), on=['날짜','KEY'], how='left')
         conn_db.to_(df, 'data_from_krx', upload_dict[colname])
 
 # 코스피 일별 상승률
@@ -323,7 +335,7 @@ def calc_stock_market_data():
     days = 30
     daily_values(days)              # 최근 일별 추이
     daily_change(days)              # 최근 일별 상승률
-    cum_change(days)                # 종목별 일별 누적상승률
+    cum_change()                    # 종목별 일별 누적상승률
     kospi_daily_chg(days)           # 코스피 일별 상승률
     chg_over_market()               # 일별 시장대비 상승률
     calc_kospi_cum_change(days)     # 코스피 일별 누적상승률

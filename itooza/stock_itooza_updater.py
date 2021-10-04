@@ -8,7 +8,6 @@ import helper
 import conn_db
 import stock_itooza_cleaner, stock_info_cleaner
 
-suffix = helper.get_time_suffix()
 user_agent = helper.user_agent
 max_workers = 3
 code_list = conn_db.from_("DB_기업정보", 'FS_update_list')[['종목코드','종목명']]
@@ -219,8 +218,8 @@ def _get_itooza_company_description(code):
 
         df = pd.DataFrame([title, content]).T
         df[['구분', '기준날짜']] = df[0].str.split('-', expand=True)
-        df['기준날짜'] = df['기준날짜'].str.replace('.', '/')
-        df = df.drop(columns=0).rename(columns={1: '내용'})
+        df['기준날짜'] = df['기준날짜'].astype(str).str.replace('.', '/')
+        df = df.drop(columns=0, axis=1).rename(columns={1: '내용'})
 
         df['종목코드'] = code
         cols = ['종목코드', '구분', '내용', '기준날짜']
@@ -265,7 +264,7 @@ def _get_itooza_company_description(code):
 
 @helper.timer
 def update_itooza_company_description(param='all'): 
-    company_description = pd.DataFrame()
+    df = pd.DataFrame()
     # global raw_material_1_df   # 원재료_가로형
     # global raw_material_2_df  # 원재료_세로형
     # global product_1_df  # 제품_가로형
@@ -277,30 +276,30 @@ def update_itooza_company_description(param='all'):
         new = code_list['종목코드']
         old = conn_db.from_("DB_기업정보", 'from_아이투자_기업정보')['종목코드']
         new_code_list = list(set(new) - set(old))
+
         if len(new_code_list)>0:
-            company_description = pd.concat([_get_itooza_company_description(code) for code in new_code_list])
+            df = pd.concat([_get_itooza_company_description(code) for code in new_code_list])
         else:
             print('업데이트할 내역 없음')
-        del new, old, new_code_list
 
     else:
-        # [_get_itooza_company_description(code) for code in code_list]
-        for code in code_list:
+        for code in code_list['종목코드']:
             try:
-                company_description = company_description.append(_get_itooza_company_description(code))
+                df = df.append(_get_itooza_company_description(code), ignore_index=True)
             except:
                 try:
-                    company_description = company_description.append(_get_itooza_company_description(code))
+                    df = df.append(_get_itooza_company_description(
+                        code), ignore_index=True)
                 except:
                     pass
-    if len(company_description)>0:
-        company_description.reset_index(drop=True, inplace=True)
-        conn_db.to_(company_description,'from_아이투자','기업정보_최근update')
+    if len(df)>0:
+        df.reset_index(drop=True, inplace=True)
+        conn_db.to_(df,'from_아이투자','기업정보_최근update')
         
         # cleaner 실행
-        stock_itooza_cleaner.clean_itooza_company_description(company_description)
-        stock_info_cleaner.merge_all_fs()
-        stock_info_cleaner.run_info_all()
+        stock_itooza_cleaner.clean_itooza_company_description(df)
+        stock_info_cleaner.make_master_co_info()
+        stock_info_cleaner.co_info_to_dash()
     else:
         print('업데이트할 내역 없음')
 ''

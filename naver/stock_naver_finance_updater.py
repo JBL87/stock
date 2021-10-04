@@ -7,8 +7,7 @@ from glob import glob
 import helper
 import conn_db
 
-suffix = helper.get_time_suffix()
-# user_agent = helper.user_agent
+user_agent = helper.user_agent
 # max_workers = 3
 
 

@@ -282,21 +282,22 @@ def clean_itooza_company_description(df):
     df = helper.make_keycode(df)
     
     # 가장 최근 파일이 위로 가도록 순서 정렬해서 취합하고 과거 df랑 중복 되는거 삭제
-    company_description['내용'] = company_description['내용'].apply(lambda x : x.replace('▷ ','\n▷ ' ).strip() if '▷ 'in x else x.replace('▷','\n▷ ' ).strip() if '▷' in x else x )
+    df['내용'] = df['내용'].apply(lambda x : x.replace('▷ ','\n▷ ' ).strip() if '▷ 'in x else x.replace('▷','\n▷ ' ).strip() if '▷' in x else x )
     old_df = conn_db.from_('DB_기업정보', 'from_아이투자_기업정보')
 
     # 1. 기업정보
     cols = ['구분', 'KEY']
-    company_description = helper.add_df(company_description, old_df, cols)
+    df = helper.add_df(df, old_df, cols)
 
-    conn_db.to_(company_description, 'DB_기업정보', 'from_아이투자_기업정보')
-
+    conn_db.to_(df, 'DB_기업정보', 'from_아이투자_기업정보')
+    print('from_아이투자_기업정보에 업로드 완료')
+    
     # 2. 제품, 원재료
     col_name_dict = {'주요제품':'제품명',
                     '원재료':'원재료'}
     for col_names in col_name_dict.keys():
         col_name = col_name_dict[col_names]
-        df_temp = company_description[company_description['구분']==col_names].reset_index(drop=True)
+        df_temp = df[df['구분']==col_names].reset_index(drop=True)
 
         df_result = pd.DataFrame()
 
