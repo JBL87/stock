@@ -185,6 +185,7 @@ def update_fnguide_invest_ratio(param='all'):  # fnguide 투자지표 업데이�
         print('업데이트할 내역 없음')
 
 # 업종, business summary
+@helper.timer
 def clean_fnguide_company_info(df):
     df = helper.make_keycode(df.reset_index(drop=True))
 
@@ -217,6 +218,7 @@ def clean_fnguide_company_info(df):
     conn_db.to_(df, 'DB_기업정보', 'from_fnguide_기업정보')
 
 # 재무제표 주요 항목
+@helper.timer
 def clean_financial_highlights(df):
     df = helper.make_keycode(df.reset_index(drop=True))
     # 가장 최근 파일이 위로 가도록 순서 정렬해서 취합하고 과거 df랑 중복 되는거 삭제
@@ -268,6 +270,7 @@ def clean_financial_highlights(df):
     conn_db.to_(df,'fnguide_fs_highlights','fs')
 
 # 제품별 매출비중
+@helper.timer
 def clean_salex_fix(df):
     df = helper.make_keycode(df.reset_index(drop=True))
 
@@ -280,6 +283,7 @@ def clean_salex_fix(df):
     conn_db.to_(df, 'DB_기업정보', 'sales_mix_from_fnguide')
 
 # 시장점유율 가장 최근
+@helper.timer
 def clean_market_share(df):
     df = helper.make_keycode(df.reset_index(drop=True))
     # 가장 최근 파일이 위로 가도록 순서 정렬해서 취합하고 과거 df랑 중복 되는거 삭제
@@ -290,6 +294,7 @@ def clean_market_share(df):
     conn_db.to_(df, 'DB_기업정보', 'mkt_share_from_fnguide')
 
 # 판관비율추이, 매출원가율추이
+@helper.timer
 def clean_cogs_and_expense(df):
     cols = ['날짜','연결/별도','종목코드']
     df = df.pivot_table(index=cols, columns='항목',values='값').reset_index()
@@ -315,6 +320,7 @@ def clean_cogs_and_expense(df):
     conn_db.to_(df, 'DB_기업정보', '매출원가율_판관비율_from_fnguide')
 
 # 수출 및 내수 구성
+@helper.timer
 def clean_export_n_domestic(df):
     cols = ['날짜','연결/별도','종목코드','매출유형','제품명']
     df = df.pivot_table(index=cols, columns='수출/내수',values='값').reset_index()

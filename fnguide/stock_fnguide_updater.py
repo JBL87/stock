@@ -9,7 +9,6 @@ import conn_db
 import stock_info_cleaner, stock_fnguide_cleaner
 # import pantab, platform
 
-suffix = helper.get_time_suffix()
 user_agent = helper.user_agent
 max_workers = 3
 code_list = conn_db.from_("DB_기업정보", 'FS_update_list')['종목코드']
@@ -370,12 +369,13 @@ def _get_fnguide_company_info(code):
     global cogs_n_oc # 판관비율추이, 매출원가율추이
     global export_n_domestic # 수출 및 내수 구성
 
-    #업종, business summary, 재무제표 공통
+    # 업종, business summary, 재무제표 공통
     url = f"http://comp.fnguide.com/SVO2/asp/SVD_Main.asp?pGB=1&gicode=A{code}&cID=&MenuYn=Y&ReportGB=&NewMenuID=101&stkGb=701"
     time.sleep(2)
     r = requests.get(url, headers={'User-Agent': user_agent})
     dom = BeautifulSoup(r.text, "html.parser")
-    #업종, business summary
+
+    # 업종, business summary
     # 업종 가져오기
     temp = []
     for i in [1,2]: # 1=KSE 업종, 2=FICS 업종
@@ -405,6 +405,12 @@ def _get_fnguide_company_info(code):
         df['종목코드'] = code
         # 결과물 추가
         company_info = company_info.append(df)
+        # fnguide에 오류있어서 수정
+        if code == '260970':
+            try:
+                company_info.rename(columns={'KONEX':'KOSDAQ', inplace=True}
+            except:
+                pass
         del contents, biz_summary_date, biz_summary_title, industry, temp
     except:
         pass
@@ -675,7 +681,6 @@ def update_fnguide_company_info(param='all'):
 
     # 업종, business summary
     if len(company_info)>0:
-        company_info = helper.make_keycode(company_info.reset_index(drop=True))
         # 정리
         stock_fnguide_cleaner.clean_fnguide_company_info(company_info)
         stock_info_cleaner.run_info_all()
@@ -683,26 +688,26 @@ def update_fnguide_company_info(param='all'):
 
     # 재무제표 주요 항목
     if len(financial_highlights)>0:
-        stock_fnguide_cleaner.clean_fnguide_company_info(financial_highlights)
+        stock_fnguide_cleaner.clean_financial_highlights(financial_highlights)
         del financial_highlights
 
     # 제품별 매출비중 가장 최근
     if len(sales_mix)>0:
-        stock_fnguide_cleaner.clean_fnguide_company_info(sales_mix)
+        stock_fnguide_cleaner.clean_salex_fix(sales_mix)
         del sales_mix
 
     # 시장점유율 가장 최근
     if len(market_share):
-        stock_fnguide_cleaner.clean_fnguide_company_info(market_share)
+        stock_fnguide_cleaner.clean_market_share(market_share)
         del market_share
 
     # 판관비율추이, 매출원가율추이
     if len(cogs_n_oc)>0:
-        stock_fnguide_cleaner.clean_fnguide_company_info(cogs_n_oc)
+        stock_fnguide_cleaner.clean_cogs_and_expense(cogs_n_oc)
         del cogs_n_oc
 
     # 수출 및 내수 구성
     if len(export_n_domestic)>0:
-        stock_fnguide_cleaner.clean_fnguide_company_info(export_n_domestic)
+        stock_fnguide_cleaner.clean_export_n_domestic(export_n_domestic)
 
-    stock_info_cleaner.merge_all_fs()
+    stock_info_cleaner.run_info_all()
