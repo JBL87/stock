@@ -190,7 +190,7 @@ def make_master_co_info():
     conn_db.to_(df, 'DB_기업정보', '총괄')
 
 def co_info_to_dash():
-    # 구글시트용_사용하는 것들 합쳐놓기
+    # 구글시트용_사용하는 것들 합치기
     co_info_master = conn_db.from_('DB_기업정보', '총괄')
     naver_industry_per = conn_db.from_('DB_기업정보', '네이버업종PER')
     naver_finance = conn_db.from_('from_naver증권', 'naver_최근값만')
@@ -204,3 +204,57 @@ def co_info_to_dash():
     # naver_finance + df
     df = df.merge(naver_finance, on='KEY', how='left')
     conn_db.to_(df, 'data_from_krx', '기업정보+재무')
+
+def merge_all_fs(): # 아이투자, naver, fnguide 합쳐진 하나의 df만들기
+    folder_fn = conn_db.get_path('folder_fn')
+    folder_naver = conn_db.get_path('folder_naver_fs')
+    folder_itooza = conn_db.get_path('folder_itooza')
+    folder_itooza_backup = conn_db.get_path('folder_itooza_backup')
+
+    df_itooza = pd.read_pickle(folder_itooza + '장기투자지표_취합본.pkl')
+    df_naver = pd.read_pickle(folder_naver + 'fs_from_naver_최근값만.pkl')
+    df_fnguide_fsratio = pd.read_pickle(folder_fn + '2_fsratio_from_fnguide_최근값만.pkl')
+
+    # 아이투자 듀퐁ROE 추가
+    files = glob(folder_itooza_backup + '*_최근지표*.pkl')
+    files.reverse()
+
+    temp = pd.concat([pd.read_pickle(file) for file in files])
+    temp = temp.drop_duplicates().reset_index(drop=True)
+    temp = helper.make_keycode(temp).drop(columns=['종목코드','종목명'])
+    
+    temp['항목'] = temp['항목']+'_r'
+    temp = temp.pivot_table(index='KEY',columns='항목', values='값').reset_index()
+    temp.columns.name=None
+    temp['ROE_r'] = temp['ROE_r']/100
+
+    #--------------------------------------------------------------------        
+    df = df_itooza.merge(df_naver, on='KEY', how='inner')
+    df = df.merge(df_fnguide_fsratio, on='KEY', how='inner')
+    df = df.merge(temp, on='KEY', how='inner')
+    df = df.merge(conn_db.from_('DB_기업정보','총괄') , on='KEY', how='inner')
+
+    # 네이버업종PER 추가
+    industry_per = conn_db.from_('DB_기업정보','네이버업종PER')
+    # industry_per['업종PER'] = industry_per['업종PER'].astype('float')
+    df = df.merge(industry_per, on='업종_naver', how='left')
+
+    # vlookup이나 query문 작성할 때 편리하기 위해서 KEY 컬럼을 맨 앞으로 배치
+    all_cols = df.columns.tolist()
+    all_cols.remove('KEY')
+    all_cols = ['KEY'] + all_cols
+
+    # 합친것 저장
+    df.to_pickle(conn_db.get_path('장기투자지표_취합본+기업정보총괄')+'.pkl')
+    conn_db.to_(df, 'Gfinance_시장data', 'import_장기투자지표_취합본+기업정보총괄')
+
+    # 종목정리_ver1.0 테이블
+    loc = all_cols.index("종목코드") # 종목코드 앞에 있는 컬럼만 가져오기
+    cols = all_cols[:loc]
+    conn_db.to_(df[cols], '종목정리_ver1.0', 'import_fsdata')
+
+def run_info_all():
+    merge_co_info()
+    classify_co_by_industry()
+    make_master_co_info()
+    co_info_to_dash()
