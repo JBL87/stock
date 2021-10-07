@@ -217,7 +217,7 @@ def update_market_cap():
 
 def _get_new_dates(old_date_series):
     new_dates = conn_db.from_('코스피_코스닥지수', '최근날짜')[['Date']]
-    new_dates['Date'].str.replace('-', '').unique().tolist()
+    new_dates = new_dates['Date'].str.replace('-', '').unique().tolist()
     
     old_dates = old_date_series.astype(str).str.replace('-', '')
     new_dates = list(set(new_dates)-set(old_dates))
