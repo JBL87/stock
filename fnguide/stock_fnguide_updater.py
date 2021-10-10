@@ -403,15 +403,15 @@ def _get_fnguide_company_info(code):
         contents[2] = contents[2][0][0] # 내용 컬럼의 값이 앞뒤로 list[]화 되어 있어서 문자열로 변경
         df = pd.concat([contents, industry], axis=1)
         df['종목코드'] = code
-        # 결과물 추가
-        company_info = company_info.append(df)
         # fnguide에 오류있어서 수정
         if code == '260970':
             try:
-                company_info.rename(columns={'KONEX':'KOSDAQ', inplace=True}
+                company_info.rename(columns={'KONEX':'KOSDAQ'}, inplace=True)
             except:
                 pass
-        del contents, biz_summary_date, biz_summary_title, industry, temp
+        # 결과물 추가
+        company_info = company_info.append(df)
+        
     except:
         pass
 
@@ -460,7 +460,6 @@ def _get_fnguide_company_info(code):
         df_all['종목코드'] = code
         # 결과물 추가
         financial_highlights = financial_highlights.append(df_all)
-        del df_all, df, temp, data_values
     except:
         pass
 
@@ -509,7 +508,6 @@ def _get_fnguide_company_info(code):
         # 결과물 추가
         df['종목코드'] = code
         sales_mix = sales_mix.append(df)
-        del df, filt, mix_date, data_values, products, date_cols
     except:
         pass
 
@@ -661,9 +659,9 @@ def update_fnguide_company_info(param='all'):
     # with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
     #     executor.map(_get_fnguide_company_info, code_list)
     if param !='all':
-        new = conn_db.from_("DB_기업정보", 'FS_update_list')['종목코드']
+        # new = conn_db.from_("DB_기업정보", 'FS_update_list')['종목코드']
         old = conn_db.from_("DB_기업정보", 'from_fnguide_기업정보')['종목코드']
-        new_code_list = list(set(new) - set(old))
+        new_code_list = list(set(code_list) - set(old))
         if len(new_code_list)>0:
             for code in new_code_list:
                 try:
@@ -674,7 +672,6 @@ def update_fnguide_company_info(param='all'):
                     pass
         else:
             print('업데이트할 내역 없음')
-            del new, old, new_code_list
     else:
         for code in code_list:
             _get_fnguide_company_info(code)

@@ -188,24 +188,24 @@ def update_fnguide_invest_ratio(param='all'):  # fnguide 투자지표 업데이�
 @helper.timer
 def clean_fnguide_company_info(df):
     df = helper.make_keycode(df.reset_index(drop=True))
-
     # 코스피(KSE)와 코스닥(KOSDAQ)이 별도 컬럼에 있는데 KRX하나로 통합
+    df['KRX'] = df['KOSDAQ'].fillna(df['KSE'])
+    df.drop(columns=['KSE','KOSDAQ'], inplace=True)
+    try:
+        df['KRX'] = df['KRX'].fillna(df['KONEX'])
+        df.drop(columns=['KONEX'], inplace=True)
+    except:
+        pass
     all_cols = df.columns.tolist()
-    for col in all_cols: # 컬럼별로 앞뒤 공백제거
+    for col in all_cols:  # 컬럼별로 앞뒤 공백제거
         df[col] = df[col].str.strip()
-    if 'KSE' in all_cols:
-        df['KRX'] = (df['KSE'].astype(str) + df['KOSDAQ'].astype(str)).str.replace('nan','').str.strip()
-    else:
-        df['KRX'] = df['KOSDAQ'].astype(str).str.replace('nan','').str.strip()
 
+    df['KRX'] = df['KRX'].str.split(' ', 1, expand=True)[1].str.strip()
     # 종목앞에 코스피/코스닥이 있어서 삭제
-    df['KRX'] = df['KRX'].str.split(' ',1,expand=True)[1]
-    df['KRX'].fillna(df['FICS'], inplace=True)
-    if 'KSE' in all_cols:
-        df = df.rename(columns={0:'기준날짜',  1:'요약', 2:'내용'}).drop(columns=['KSE','KOSDAQ'])
-    else:
-        df = df.rename(columns={0:'기준날짜',  1:'요약', 2:'내용'}).drop(columns='KOSDAQ')
-
+    names = {0:'기준날짜',
+             1:'요약',
+             2:'내용'}
+    df.rename(columns=names, inplace=True)
     # 가장 최근 파일이 위로 가도록 순서 정렬해서 취합하고 과거 df랑 중복 되는거 삭제
     old_df = conn_db.from_('DB_기업정보','from_fnguide_기업정보')
     cols = ['KEY']
@@ -214,7 +214,6 @@ def clean_fnguide_company_info(df):
         df.rename(columns={'et':'기준날짜'},inplace=True)
     except:
         pass
-
     conn_db.to_(df, 'DB_기업정보', 'from_fnguide_기업정보')
 
 # 재무제표 주요 항목
@@ -233,20 +232,17 @@ def clean_financial_highlights(df):
     for item in [col for col in df['항목'].unique().tolist() if '%' in col]:
         temp = df.loc[df['항목'] == item, '값']
         df.loc[df['항목']==item, '값'] = temp/100
-
     try:
         dates = df.loc[df['날짜'].str.contains('(P)'), ['날짜']]
         dates['날짜'] = dates['날짜'].str.split('\n', expand=True).iloc[:,-1:]
         df.loc[df['날짜'].str.contains('(P)'), ['날짜']] = dates
     except:
         pass
-
     # 실적/전망 컬럼 생성
     for expect in ['E','P']:
         if df['날짜'].str.contains(expect).sum()>0:
             df['실적/전망'] = df['날짜'].apply(lambda x : '전망' if expect in x else '실적')
             df['날짜'] = df['날짜'].str.replace(f'\({expect}\)', '')
-
     # 항목에 있는 괄호 부분 삭제
     for item in ['\(원\)', '\(배\)','\(%\)']:
         df['항목'] = df['항목'].str.replace(item, '')
