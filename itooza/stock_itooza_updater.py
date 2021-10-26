@@ -17,15 +17,10 @@ raw_material_1_df = pd.DataFrame() # 원재료_가로형
 raw_material_2_df = pd.DataFrame() # 원재료_세로형
 product_1_df = pd.DataFrame() # 제품_가로형
 product_2_df = pd.DataFrame()  # 제품_세로형
-#----------------------------------------------------------------
 # 아이투자 투자지표 가져올때 결과물 넣을 dataframes
 df_short = pd.DataFrame() # 가장 최근값 테이블
 df_5yr = pd.DataFrame() # 5년 평균 테이블
-df_tables = pd.DataFrame() # 페이지 아래에 있는 전체 표(연환산,연간,분기)
-
-folder_itooza = conn_db.get_path('folder_itooza')
-folder_itooza_backup = conn_db.get_path('folder_itooza_backup')
-
+df_tables = pd.DataFrame() # 페이지 아래에 있는 전체 표(연환산,연간,분기) 
 
 # 아이투자 투자지표
 def _get_table_from_itooza(param): # 5개년 주요 투자지표 및 최근것까지 반영된 투자지표 가져오기
@@ -99,7 +94,7 @@ def _get_table_from_itooza(param): # 5개년 주요 투자지표 및 최근것�
         df_5yr = df_5yr.append(df_fiveyr)
     except:
         print(f'{param} 5개년 지표 가져오기 실패')
-    
+
     #-------------------------------------------------------------------------------
     # 최근 지표 가져오기
     try:
@@ -135,12 +130,11 @@ def _get_table_from_itooza(param): # 5개년 주요 투자지표 및 최근것�
     except:
         print(f'{param} 최근 지표 가져오기 실패')
     print(f'{co} 가져오기 완료')
-
 # 5개년 주요 투자지표 alc 전체 투자지표 업데이트
 @helper.timer
 def update_itooza_fsratio(param='all'): # 5개년 주요 투자지표 업데이트
-    global code_list
     # global max_workers
+    global code_list
     global df_tables
     global df_5yr
     global df_short
@@ -153,30 +147,30 @@ def update_itooza_fsratio(param='all'): # 5개년 주요 투자지표 업데이�
 
         if len(new_code)>0:
             code_list_temp = code_list[code_list['종목코드'].isin(new_code)]
-            code_list_temp = code_list_temp.values.tolist() 
+            code_list_temp = code_list_temp.values.tolist()
 
             for param in code_list_temp:
-                _get_table_from_itooza(param) 
+                _get_table_from_itooza(param)
             del code_list_temp
         else:
-            print('업데이트할 내역 없음') 
+            print('업데이트할 내역 없음')
 
     else: # 전체 업데이트
         code_list_temp = code_list.values.tolist()
-        
+
         for param in code_list_temp:
                 _get_table_from_itooza(param)
         # with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         #     executor.map(_get_table_from_itooza, code_list_temp)
-        
+
         print('(1차 가져오기 완료')
         print('누락된거 확인후 다시 시도')
 
         done_code = df_tables['종목코드'].unique().tolist()
         new = code_list['종목코드']
         new_code = list(set(new) - set(done_code))
-        
-        if len(new_code)>0: 
+
+        if len(new_code)>0:
             code_list_temp = code_list[code_list['종목코드'].isin(new_code)]
             code_list_temp = code_list_temp.values.tolist()
             [_get_table_from_itooza(param) for param in code_list_temp]
@@ -188,7 +182,7 @@ def update_itooza_fsratio(param='all'): # 5개년 주요 투자지표 업데이�
     # 테이블에 있는 지표 정리
     if len(df_tables)>0:
         stock_itooza_cleaner.clean_index_table(df_tables)
-        del df_tables 
+        del df_tables
 
     # 5개년 주요 투자지표 정리
     if len(df_5yr)>0:
@@ -199,10 +193,10 @@ def update_itooza_fsratio(param='all'): # 5개년 주요 투자지표 업데이�
     if len(df_short)>0:
         stock_itooza_cleaner.clean_5yr_and_recent_index(df_short, '최근지표요약')
         del df_short
-    stock_info_cleaner.merge_all_fs()
+    stock_info_cleaner.run_info_all()
 
 #아이투자 기업정보
-def _get_itooza_company_description(code): 
+def _get_itooza_company_description(code):
     time.sleep(1)
     url = f"http://search.itooza.com/search.htm?seName={code}&jl=k&search_ck=&sm=&sd=&ed=&ds_de=&page=&cpv="
     try:
@@ -261,9 +255,8 @@ def _get_itooza_company_description(code):
     # raw_material_2['종목코드'] = code
     # raw_material_2_df = raw_material_2_df.append(raw_material_2)
     #------------------------------------------------------------------------------------------------------------------------
-
 @helper.timer
-def update_itooza_company_description(param='all'): 
+def update_itooza_company_description(param='all'):
     df = pd.DataFrame()
     # global raw_material_1_df   # 원재료_가로형
     # global raw_material_2_df  # 원재료_세로형
@@ -295,11 +288,10 @@ def update_itooza_company_description(param='all'):
     if len(df)>0:
         df.reset_index(drop=True, inplace=True)
         conn_db.to_(df,'from_아이투자','기업정보_최근update')
-        
+
         # cleaner 실행
         stock_itooza_cleaner.clean_itooza_company_description(df)
-        stock_info_cleaner.make_master_co_info()
-        stock_info_cleaner.co_info_to_dash()
+        stock_info_cleaner.run_info_all()
     else:
         print('업데이트할 내역 없음')
 ''
